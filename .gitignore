@@ -1,0 +1,6 @@
+.env
+chroma_db/
+mem0_db_768/
+__pycache__/
+*.pyc
+.DS_Store
