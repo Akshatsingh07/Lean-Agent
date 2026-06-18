@@ -90,9 +90,8 @@ def save_memory(text: str, user_id: str="default_user") -> None:
         return
 
     try:
-        print("\n  [Mem0] Saving interaction to long-term memory...")
         mem.add(text, user_id=user_id)
-        print("  [Mem0] ✓ Memory saved successfully.")
+        print(" [Mem0] Memory saved successfully.")
     except Exception as e:
         print(f"  [Mem0 Warning]: Save failed: {e}")
 
