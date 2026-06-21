@@ -1,19 +1,24 @@
 import time
-import os
+
 from graph.state import Agentstate
 from vector_store.hybrid_retriever import hybrid_retrieve
 
 try:
     from mem0 import Memory
-    MEMO_AVAILABLE=True
+    MEMO_AVAILABLE = True
 except ImportError:
-    MEMO_AVAILABLE=False
+    MEMO_AVAILABLE = False
     print("mem0 not installed. Run: pip install mem0ai")
-    print("Continuing without memory — agent will have no personalisation.")
+    print("Continuing without memory - agent will have no personalisation.")
     
-_memory=None
+_memory = None
+
+
 def get_memory():
     global _memory
+    if not MEMO_AVAILABLE:
+        return None
+
     if _memory is not None:
         return _memory
 
@@ -44,13 +49,14 @@ def get_memory():
     _memory = Memory.from_config(config_dict=config)
     return _memory
 
-def fetch_memory_context(query:str, user_id:str="Default_user") -> str:
-    mem=get_memory()
+
+def fetch_memory_context(query: str, user_id: str = "default_user") -> str:
+    mem = get_memory()
     if mem is None:
         return ""
     
     try:
-        search_results=mem.search(query=query, filters={"user_id": user_id})
+        search_results = mem.search(query=query, filters={"user_id": user_id})
         if not search_results:
             return ""
         # memory_lines=[]
@@ -72,7 +78,7 @@ def fetch_memory_context(query:str, user_id:str="Default_user") -> str:
             memories.append(search_results)
             
         if memories:
-            return "Relevant History:\n" + "\n".join(memories)
+            return "Relevant History:\n" + "\n".join(memories[:5])
             
         return ""
     except Exception as e:
@@ -84,7 +90,7 @@ def fetch_memory_context(query:str, user_id:str="Default_user") -> str:
             
         return ""
 
-def save_memory(text: str, user_id: str="default_user") -> None:
+def save_memory(text: str, user_id: str = "default_user") -> None:
     mem = get_memory()
     if not mem:
         return
@@ -96,12 +102,12 @@ def save_memory(text: str, user_id: str="default_user") -> None:
         print(f"  [Mem0 Warning]: Save failed: {e}")
 
 def router_node(state: Agentstate) -> dict:
-    print(f"[NODE 1- Router]")
-    query=state["user_query"]
-    user_id="Default_user"
+    print("[NODE 1 - ROUTER]")
+    query = state["user_query"]
+    user_id = "default_user"
     print(f"Query : {query}")
     
-    t_start=time.time()
+    t_start = time.time()
     print("\n[1/2] Fetching memory context from mem0")
     memory_context = fetch_memory_context(query, user_id=user_id)
     if memory_context:

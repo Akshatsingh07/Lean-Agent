@@ -197,14 +197,26 @@ TEST_QUERIES = [
         "category": "Jira",
         "difficulty": "hard",   # purely semantic, no keywords
     },
-    "Hi, my name is Akshat and I am the lead developer for the MOBILE project.",
-    "Create a high priority bug ticket for a login crash on Safari iOS 17."
+    {
+        "query": "Hi, my name is Akshat and I am the lead developer for the MOBILE project.",
+        "expected_tools": [],
+        "expected_keywords": ["Akshat", "MOBILE"],
+        "category": "Memory",
+        "difficulty": "easy",
+    },
+    {
+        "query": "Create a high priority bug ticket for a login crash on Safari iOS 17.",
+        "expected_tools": ["create_jira_ticket"],
+        "expected_keywords": ["ticket", "Safari", "iOS"],
+        "category": "Jira",
+        "difficulty": "easy",
+    },
 ]
 
 
 def get_test_queries() -> list[dict]:
     """Returns the full test dataset."""
-    return TEST_QUERIES
+    return [q for q in TEST_QUERIES if isinstance(q, dict)]
 
 
 def get_queries_by_difficulty(difficulty: str) -> list[dict]:

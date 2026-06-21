@@ -5,7 +5,6 @@ from graph.state import Agentstate, create_initial_state
 from agents.router_node import router_node
 from agents.worker_node import worker_node
 from agents.respond_node import respond_node
-from agents.router_node import save_memory
 
 def _should_continue(state: Agentstate) -> str:
     messages = state.get("messages", [])
@@ -21,25 +20,24 @@ def _should_continue(state: Agentstate) -> str:
     return "respond"
 
 def build_graph():
-    graph=StateGraph(Agentstate)
-    graph.add_node("router",router_node)
-    graph.add_node("worker",worker_node)
-    graph.add_node("respond",respond_node)
+    graph = StateGraph(Agentstate)
+    graph.add_node("router", router_node)
+    graph.add_node("worker", worker_node)
+    graph.add_node("respond", respond_node)
     
-    graph.add_edge(START,"router")
-    graph.add_edge("router","worker")
+    graph.add_edge(START, "router")
+    graph.add_edge("router", "worker")
     
     graph.add_conditional_edges(
         "worker",
         _should_continue,
         {
-            "worker":"worker",
-            "respond":"respond"
+            "worker": "worker",
+            "respond": "respond"
         }
     )
-    graph.add_edge("respond",END)
-    compile=graph.compile()
-    return compile
+    graph.add_edge("respond", END)
+    return graph.compile()
     
 def run_agent(query: str):
     app = build_graph()

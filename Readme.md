@@ -1,77 +1,132 @@
 # Lean Agent
 
-A 100% local, air-gapped AI agent designed to execute enterprise tools efficiently. By utilizing an advanced Hybrid RAG pipeline and a LangGraph architecture, Lean Agent dynamically retrieves and binds only the necessary tools for each query—drastically reducing the LLM context window, eliminating hallucinations, and cutting out cloud API latency.
+Lean Agent is a local enterprise AI agent that solves the "too many tools in the prompt" problem. Instead of binding every available enterprise function to the LLM, it retrieves the few tools relevant to the user's request, binds only those tools, executes them through LangGraph, and records benchmark evidence for the retrieval pipeline.
 
-## 🚀 The Proof (Benchmark Results)
+## Why This Is Resume-Worthy
 
-Compared to a "naive" agent that loads all 50+ enterprise tools into the prompt context, Lean Agent performs significantly better on local hardware (tested with `llama3.1`):
+- Built a dynamic tool-selection agent over a 50-tool enterprise registry.
+- Combined BM25 sparse retrieval, Chroma dense retrieval, Reciprocal Rank Fusion, and optional cross-encoder reranking.
+- Reduced average tool-context tokens by 93.9% in the included benchmark while preserving 100% top-k retrieval accuracy on the sampled evaluation set.
+- Added a repeatable evaluation harness with per-query evidence in `eval/results.json`.
+- Runs locally with Ollama, ChromaDB, LangGraph, and optional mem0 memory.
 
-* **Context Window:** 📉 93.7% fewer tokens (~190 vs 3,000+)
-* **Retrieval Accuracy:** 🎯 100% accuracy (vs 62% naive guessing)
-* **Latency:** ⚡ ~2–5 seconds per query (post cold-start)
-* **Privacy:** 🔒 100% local execution. Zero data leaves your machine.
-
-## 🧠 Architecture & Tech Stack
-
-Lean Agent operates on a deterministic graph loop:
-1. **Memory Retrieval:** Extracts long-term user context.
-2. **Hybrid Search:** Combines semantic search with exact keyword matching.
-3. **Re-ranking:** Scores and isolates the top 3 tools from a registry of 50+.
-4. **Execution:** Binds the isolated tools to a local LLM for strict JSON schema output and function calling.
-
-**The Stack:**
-* **Orchestration:** LangGraph, LangChain
-* **LLM & Embeddings:** Ollama (`llama3.1`, `nomic-embed-text`)
-* **Vector Database:** ChromaDB
-* **Sparse Retrieval:** BM25 (FastEmbed)
-* **Cross-Encoder:** HuggingFace Sentence-Transformers (`ms-marco-MiniLM-L-6-v2`)
-* **Long-Term Memory:** Mem0 (Qdrant)
-
-## 📂 Project Structure
+## Architecture
 
 ```text
-lean-agent/
-├── tools/
-│   ├── tool_registry.py       # 50+ mock enterprise tool schemas
-│   └── tool_embedder.py       # Embeds schemas into ChromaDB
-├── vector_store/
-│   ├── chroma_store.py        # Dense vector search
-│   ├── bm25_store.py          # Sparse keyword search
-│   └── hybrid_retriever.py    # RRF fusion + Cross-Encoder reranking
+User query
+   |
+   v
+Router node
+   - Fetches relevant long-term memory from mem0 when available
+   - Runs hybrid retrieval over the enterprise tool registry
+   - Emits top-k tool schemas plus retrieval metadata
+   |
+   v
+Worker node
+   - Dynamically binds only retrieved tool implementations
+   - Lets the local LLM call tools through LangChain function calling
+   - Captures tool calls and structured tool results
+   |
+   v
+Respond node
+   - Extracts the final AI response
+   - Logs retrieved tools, tool calls, and retrieval latency
+   - Saves useful interaction memory
+```
+
+## Retrieval Pipeline
+
+1. **BM25 keyword retrieval** catches exact enterprise terms such as Jira ticket IDs, repo names, and service names.
+2. **Chroma vector retrieval** catches semantic requests such as "report a product problem" mapping to Jira.
+3. **Reciprocal Rank Fusion** merges sparse and dense rankings without assuming comparable score scales.
+4. **Cross-encoder reranking** can refine the final top-3 tools when `sentence-transformers` is fully available.
+5. **Graceful fallback** keeps retrieval working with BM25 when Ollama, Chroma embeddings, or the reranker are unavailable.
+
+## Project Structure
+
+```text
+Lean-Agent/
 ├── agents/
-│   ├── router_node.py         # Mem0 retrieval + Hybrid Tool RAG
-│   └── worker_node.py         # Dynamic LLM binding + Tool Execution
-│   └── respond_node.py         #Final Answer 
-├── graph/
-│   └── agent_graph.py         # LangGraph state wiring
+│   ├── router_node.py        # Memory lookup + hybrid tool retrieval
+│   ├── worker_node.py        # Dynamic tool binding + tool execution loop
+│   └── respond_node.py       # Final answer extraction + memory save
 ├── eval/
-│   └── test_queries.py        # Evaluation datasets
-│   └── benchmark.py            # Evaluation using Ragas with lean agent and naive agent
-├── main.py                    # Entry point & execution
+│   ├── benchmark.py          # Lean-vs-naive benchmark harness
+│   └── test_queries.py       # 22-query hand-labeled evaluation set
+├── graph/
+│   ├── agent_graph.py        # LangGraph wiring
+│   └── state.py              # Shared graph state
+├── tools/
+│   └── tool_registry.py      # 50 enterprise tool schemas
+├── vector_store/
+│   ├── bm25_store.py         # Sparse retrieval
+│   ├── chroma_store.py       # Dense retrieval with Ollama embeddings
+│   └── hybrid_retriever.py   # RRF + optional reranking
+├── main.py                   # Demo entry point
 └── requirements.txt
 ```
 
-⚙️ Prerequisites & Setup
-Install Ollama and pull the required local models:
+## Setup
 
-Bash
-ollama pull llama3.1
-ollama pull nomic-embed-text
-Clone and Install:
+Install dependencies:
 
-Bash
-git clone (https://github.com/Akshatsingh07/Lean-Agent.git)
-cd Lean-Agent
+```bash
 pip install -r requirements.txt
-(Note: The first run will automatically download the local BM25 and Cross-Encoder weights from HuggingFace).
+```
 
-💻 Usage
-Run the Agent Interactive Pipeline:
+Install and start Ollama, then pull local models:
 
-Bash
+```bash
+ollama pull llama3.2
+ollama pull llama3.1
+ollama pull bge-m3
+ollama pull nomic-embed-text
+```
+
+## Usage
+
+Run the full local agent demo:
+
+```bash
 python main.py
-Run the Local Evaluator (Benchmark + RAGAS):
-Test the hybrid retrieval accuracy and evaluate the local LLM's faithfulness and context precision without any OpenAI keys.
+```
 
-Bash
-python main.py --benchmark
+Force a fresh ChromaDB rebuild:
+
+```bash
+python main.py --refresh
+```
+
+Run the fast retrieval benchmark:
+
+```bash
+python eval/benchmark.py --queries 10
+```
+
+Run the full LangGraph agent benchmark:
+
+```bash
+python eval/benchmark.py --queries 10 --real-agent
+```
+
+Run RAGAS answer evaluation after full-agent execution:
+
+```bash
+python eval/benchmark.py --queries 10 --real-agent --ragas
+```
+
+## Latest Benchmark Snapshot
+
+The current local retrieval-only benchmark over 3 sample queries produced:
+
+| Metric | Lean Agent | Naive Agent |
+| --- | ---: | ---: |
+| Avg tokens in context | 243.33 | 4003.0 |
+| Avg latency | 21.03 ms | 2800.0 ms |
+| Retrieval accuracy | 1.00 | 0.62 |
+
+Result: Lean Agent used **93.9% fewer prompt-context tokens** and improved retrieval accuracy by **38.0 points** in the sampled run. Full results are saved to `eval/results.json`.
+
+## Resume Bullet
+
+Built a local LangGraph enterprise agent that dynamically retrieves and binds the top relevant tools from a 50-tool registry using BM25, Chroma vector search, Reciprocal Rank Fusion, and optional cross-encoder reranking, reducing tool-context tokens by 93.9% in a repeatable benchmark while preserving top-k retrieval accuracy.

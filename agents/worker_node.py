@@ -1,9 +1,9 @@
 import json
-import os
-from langchain_core.messages import HumanMessage,AIMessage,ToolMessage
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_core.tools import tool
-from graph.state import Agentstate
 from langchain_ollama import ChatOllama
+
+from graph.state import Agentstate
 
 @tool
 def create_jira_ticket(
@@ -114,7 +114,9 @@ def get_llm():
         model="llama3.2",
         temperature=0,
     )
-def execute_tool_calls(tool_calls:list, bound_tools: dict) -> list[ToolMessage]:
+
+
+def execute_tool_calls(tool_calls: list, bound_tools: dict) -> list[ToolMessage]:
     messages = []
  
     for tc in tool_calls:
@@ -142,25 +144,27 @@ def execute_tool_calls(tool_calls:list, bound_tools: dict) -> list[ToolMessage]:
         ))
  
     return messages
+
 def worker_node(state: Agentstate) -> dict:
-    print(f"[NODE 2 - Worker]")
-    retrieved_tools=state.get("retrieved_tools",[])
-    query=state["user_query"]
-    memory_context=state["memory_context"]
+    print("[NODE 2 - WORKER]")
+    retrieved_tools = state.get("retrieved_tools", [])
+    query = state["user_query"]
+    memory_context = state.get("memory_context", "")
     
     if not retrieved_tools:
-        return{
-            "message": [AIMessage(content="No relevant tools found for your request")],
-            "tool_calls_made":[],
-            "tool_results":[],
+        return {
+            "messages": [AIMessage(content="No relevant tools found for your request.")],
+            "tool_calls_made": [],
+            "tool_results": [],
         }
-    bound_tool_functions={}
+
+    bound_tool_functions = {}
     for tool_info in retrieved_tools:
-        name=tool_info["name"]
+        name = tool_info["name"]
         if name in ALL_MOCK_TOOLS:
-            bound_tool_functions[name]=ALL_MOCK_TOOLS[name]
+            bound_tool_functions[name] = ALL_MOCK_TOOLS[name]
         else:
-            print(f"{name} has no mock")
+            print(f"{name} has no mock implementation")
             
     if not bound_tool_functions:
         return {
@@ -168,31 +172,35 @@ def worker_node(state: Agentstate) -> dict:
             "tool_calls_made": [],
             "tool_results": [],
         }
-    llm=get_llm()
-    tools_lists=list(bound_tool_functions.values())
-    llm_with_tools=llm.bind_tools(tools_lists)
+    llm = get_llm()
+    tools_lists = list(bound_tool_functions.values())
+    llm_with_tools = llm.bind_tools(tools_lists)
     
-    bound_names=[t.name for t in tools_lists]
+    bound_names = [t.name for t in tools_lists]
+    implemented_tool_count = len(ALL_MOCK_TOOLS)
     print(f"\n Tools bound to LLM: {bound_names}")
-    print(f" Hidden from LLM:   {50 - len(tools_lists)} other tools")
+    print(f" Tool implementations available: {implemented_tool_count}")
+    print(f" Hidden from LLM:   {implemented_tool_count - len(tools_lists)} implemented tools")
     
-    memory_section=f"\n\n{memory_context}" if memory_context else ""
+    memory_section = f"\n\n{memory_context}" if memory_context else ""
     
     system_prompt = (
         f"You are an enterprise AI assistant with access to {len(tools_lists)} "
-        f"relevant company tools. Use them to complete the user's request precisely."
+        f"relevant company tools. Use them to complete the user's request precisely. "
+        f"If tool data is needed, call the best available tool before answering. "
+        f"Summarize concrete tool results in a concise final answer."
         f"{memory_section}"
     )
     
-    messages=[HumanMessage(content=query)]
-    all_tool_calls_made=[]
-    all_tool_results=[]
+    messages = [HumanMessage(content=query)]
+    all_tool_calls_made = []
+    all_tool_results = []
     
-    Max_iterations=5
-    for iteration in range(1,Max_iterations+1):
-        print("LLM iteration")
-        ai_response=llm_with_tools.invoke(
-            [{"role":"system","content":system_prompt}] + messages
+    max_iterations = 5
+    for iteration in range(1, max_iterations + 1):
+        print(f"LLM iteration {iteration}/{max_iterations}")
+        ai_response = llm_with_tools.invoke(
+            [{"role": "system", "content": system_prompt}] + messages
         )
         messages.append(ai_response)
         
@@ -214,5 +222,5 @@ def worker_node(state: Agentstate) -> dict:
     return {
         "messages": messages,
         "tool_calls_made": all_tool_calls_made,
-        "tool_results": messages[-1].content if messages else ""
+        "tool_results": all_tool_results,
     }
